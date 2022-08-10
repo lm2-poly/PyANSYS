@@ -100,10 +100,10 @@ angular_division = "angular_division"
 DB_NAME = "db_name"
 tol="tol"
 r1 = "real_constant_1" #spring stiffness
-r2 = "real_constant_2" #reference pressure for acoustic_element
-r3 = "real_constant_3" #mass value
+r2 = "real_constant_2" #mass value
+r3 = "real_constant_3" #reference pressure for acoustic_element
 r4 = "real_constant_4" #RAD, X0, Y0 for FLUID129
-r5 = "real_constant_5" #plane thickness
+
 
 if __name__ == "__main__":
     if args.main_case == "parametric_study":
@@ -144,10 +144,9 @@ if __name__ == "__main__":
         fluid_densitys = np.linspace(0,2000,n_points)
         real_constants={}
         real_constants[r1]=40000 #spring_stiffness
-        real_constants[r2]=2e-5 #reference pressure for acoustic_element
-        real_constants[r3]=200 #mass
+        real_constants[r2]= 200 #mass
+        real_constants[r3]=2e-5 #reference pressure for acoustic_element
         real_constants[r4]=.4
-        real_constants[r5]=0.001
 
 #------------------------- Result propreties -----------------------------
 #-------------------------------------------------------------------------
@@ -190,7 +189,7 @@ if __name__ == "__main__":
         solid_element, fluid_density, sound_celerity, structural_density,
         young_modulus, poisson, result_propreties[water], real_constants, 
         mass_element, spring_element, fluid_infinite_element, 
-        structural_sound_celerity, dimension_3D = False, mean_flow = False)
+        structural_sound_celerity)
             models.append(model)
 
 #---------------------- The parametric study ---------------------------

@@ -1,4 +1,3 @@
-from fileinput import filename
 import matplotlib.pyplot as plt
 from ansys.mapdl import reader as pymapdl_reader
 from ansys.mapdl.core import launch_mapdl
@@ -7,6 +6,8 @@ import numpy as np
 import pathlib
 import pickle as pkl
 import analyse_result_ansys as ARA
+import util
+import pprint as pp
 
 def extract_save_modal(APDL_folder:pathlib.Path, result_file_name:pathlib.Path,
                 data_file_name:pathlib.Path, modes_to_extract:list = None, n_ddl:int = None, 
@@ -98,9 +99,8 @@ def extract_save_modal(APDL_folder:pathlib.Path, result_file_name:pathlib.Path,
                                                 modes_to_extract, n_ddl, mapdl = mapdl)
     frequencies = frequencies[sol_index_to_freq_index]
     if extract_matrix_:
-        K_matrix, M_matrix, ev, eigen_vectors = extract_solve(APDL_folder, file_name_full, mapdl=mapdl, nev = 3, array = True)
-        K_eigen_space = Matrix_eigen_space(K_matrix, eigen_vectors)
-        M_matrix = Matrix_eigen_space()
+        M_matrix, K_matrix, ev, eigen_vectors = extract_solve(APDL_folder, file_name_full, 
+        mapdl=mapdl, n_ev = len(frequencies), array = True)
         dictionnary = {"freq": frequencies, "comp": components, 
                         "nodal-position":nodal_position, 
                         "nodal-result": nodal_results, 
@@ -119,10 +119,10 @@ def extract_save_modal(APDL_folder:pathlib.Path, result_file_name:pathlib.Path,
         return dictionnary
     if saving_type == "result-class":
         if extract_matrix_:
-            result = ARA.Modal_result(frequencies, nodal_position, components,
+            result = ARA.Modal_result_w_matrixs(frequencies, nodal_position, components,
                                 nodal_results, id_to_index, sol_index_to_freq_index,
                                 disp_ddls=disp_ddls, press_ddls=press_ddls, K = K_matrix,
-                                M = M_matrix)
+                                M = M_matrix, ev=ev, eigen_vectors=eigen_vectors)
         else:
             result = ARA.Modal_result(frequencies, nodal_position, components,
                                 nodal_results, id_to_index, sol_index_to_freq_index,
@@ -168,7 +168,7 @@ def load_object(file_name:pathlib.Path, array_type = False):
     """
     with open(file_name, "rb") as f:
         if array_type:
-            object = np.load(f)
+            object = np.load(f, allow_pickle = True)
         else:
             object = pkl.load(f)
         return object
@@ -479,18 +479,22 @@ def extract_modal_result(folder:pathlib.Path, result_file:pathlib.Path,
     n_modes = len(mode_indexs)
     U = np.zeros((n_lign, n_ddl, n_modes))
     sol_index_to_freq_index = []
+    nb_modes_rst_file = util.nb_modes(xpl)
+    if len(mode_indexs) > nb_modes_rst_file:
+        mapdl.exit()
+        string = "Not enough modes in the RST file, only : " + str(nb_modes_rst_file) 
+        raise ValueError(string)
+
     for i, mode_index in enumerate(mode_indexs):
         sol_index_to_freq_index.append(mode_index)
         xpl.goto("DSI::SET" + str(mode_index + 1))
-        try:
-            u = xpl.read("NSL")
-            u = u.asarray()
-            u = np.reshape(u, (-1, n_ddl))
-            u = order_array(u, id_to_index, index_to_id)
-            u = sup_nan_data(u)
-            U[:,:,i] = u
-        except:
-            raise 'SINGULARITY'
+        u = xpl.read("NSL")
+        u = u.asarray()
+        u = np.reshape(u, (-1, n_ddl))
+        u = order_array(u, id_to_index, index_to_id)
+        u = sup_nan_data(u)
+        U[:,:,i] = u
+
     xpl.close()
     if save:
         dic = {"disp": U, "id_to_index": id_to_index,
@@ -514,9 +518,12 @@ def extract_matrix(folder, file_name, mapdl = None, array = False,
         D = mm.damp(fname=file_name)
     if array:
         K = K.asarray()
+        K = util.from_unsym_to_sym(K)
         M = M.asarray()
+        M = util.from_unsym_to_sym(M)
         if damping:
             D = D.asarray()
+            D = util.from_unsym_to_sym(D)
     if damping:
         return M, K, D
     else:
@@ -536,11 +543,12 @@ def extract_solve(folder, file_name, mapdl, n_ev, array = False):
     M, K = extract_matrix(folder, file_name, mapdl)
     ev, eigen_vectors = eigs(M, K, mapdl, n_ev, array)
     if array:
-        K_np = K.asarray()
-        M_np = M.asarray()
+        K = K.asarray()
+        K = util.from_unsym_to_sym(K)
+        M = M.asarray()
+        M = util.from_unsym_to_sym(M)
 
-    
-    return M_np, K_np, ev, eigen_vectors
+    return M, K, ev, eigen_vectors
 
 
 

@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import extract_result_ansys as ERA
 import util
+from scipy.optimize import linear_sum_assignment
+
 
 SOLID_COMP = "SOLID_NODES"
 FLUID_COMP = "FLUID_NODES"
@@ -145,8 +147,7 @@ class Modal_result(Result_class):
     """
     def __init__(self, frequencies:list, nodal_position:np.ndarray, components:dict,
                 nodal_results:np.ndarray, id_to_index:dict, mode_index_to_freq_index:list, 
-                disp_ddls:list = None, press_ddls:list = None, K:np.array = None, M:np.array = None,
-                K_eigen_space = None, M_eigen_space = None, ev = None, name:str = "Modal results"):
+                disp_ddls:list = None, press_ddls:list = None, name:str = "Modal results"):
         super().__init__(nodal_position, nodal_results, id_to_index, components, name)
         self.frequencies = frequencies
         self.nodes = nodal_position
@@ -161,12 +162,7 @@ class Modal_result(Result_class):
         if press_ddls != None:
             self.set_press(press_ddls)
         self.index_id_freq()
-        if K != None:
-            self.K = K
-            self.M = M
-            self.K_eigen_space = K_eigen_space
-            self.M_eigen_space = M_eigen_space
-            self.ev = ev 
+        
     
     def index_id_freq(self):
         """ the method index_id_freq
@@ -319,6 +315,209 @@ class Modal_result(Result_class):
             indexs.sort()
             return indexs
     
+    def unique_frequencies(self, decimal:int = None, ids_ = False, neg = False):
+        """
+        The methode get_frequencies
+        Note : 
+            return the frequency of the analysis
+        
+        Args :
+            decimal( int ):
+                it's the number of decimal we want for the separation of the unicity
+                selection of the frequencies.
+            
+            ids_( bool ):
+                Default = False. Indicates whether to return the indexs of self.frequencies
+                chosen to be unique.
+            
+            neg( bool ):
+                Default = False. Indicates if we want negative frequency or not.
+            
+        Returns:
+            frequencies( np.array ):
+                The list of frequency selected
+            
+            ids( list ):
+                The list of indexs of the frequencies selected
+            
+        """
+        frequencies = self.frequencies
+        if decimal == None:
+            id_pos = np.where(frequencies >= 0)
+            return frequencies[id_pos], id_pos
+        else:
+            frequencies_, ids = np.unique(frequencies.round(decimals=decimal), return_index=True)
+            if neg == False:
+                id_pos = np.where(frequencies_ >= 0)
+                ids = ids[id_pos]
+            if ids_:
+                return frequencies[ids], ids
+            else:
+                return frequencies[ids]
+    
+    def associate_frequencies(self, approx_freqs, decimal = None, 
+    score = False, family_id = False):
+        freqs, ids = self.unique_frequencies(decimal=decimal)
+        freqs_assigned = np.zeros(np.size(approx_freqs))
+        cost_matrix = util.diff_cost(approx_freqs, freqs)
+        row_inds, col_inds = linear_sum_assignment(cost_matrix)
+        for row_ind, col_ind in zip(row_inds, col_inds):
+            freqs_assigned[row_ind] = freqs[col_ind]
+        if score:
+            score = np.sum(cost_matrix[row_inds, col_inds])
+            if family_id:
+                return freqs_assigned, row_inds, score
+            else:
+                return freqs_assigned, score
+        return freqs_assigned
+
+            
+
+    
+    def get_frequency(self, approx_freq:float, id = False, decimal = None, 
+                    inferior = False):
+        """
+        The methode get_frequency
+        Note : 
+            To select the frequency with an approximation of the frequency
+        
+        Args :
+            approx_freq( float ):
+                The approximation of the frequency
+            
+            id( bool ):
+                Default = False. Indicates whether we want the index of self.frequencies
+                wich corresponds to the frequency selected
+            
+        Returns:
+            frequencies( float ):
+                The frequency selected
+            
+            ids( list ):
+                The index of the frequency selected
+            
+        """
+        frequencies, idxs = self.unique_frequencies(decimal, True)
+        if inferior:
+            id_0, = np.where((approx_freq - frequencies) >= 0)
+            if len(id_0) == 0:
+                condition = abs(frequencies-approx_freq) == min(abs(frequencies-approx_freq))
+                id_ = np.where(condition)
+            else:
+                frequencies = frequencies[id_0]
+                id_, = np.where( abs(frequencies[id_0]-approx_freq) == min(abs(frequencies[id_0]-approx_freq)))
+                id_ = id_0[id_]
+        else:
+            condition = abs(frequencies-approx_freq) == min(abs(frequencies-approx_freq))
+            id_ = np.where(condition)
+        frequency = frequencies[id_]
+        if id:
+            return frequency, idxs[0][id_]
+        else : 
+            return frequency
+    
+    
+
+
+
+
+class Modal_result_w_matrixs(Modal_result):
+    """
+    Notes : The Modal_result class is used to represent modal results from an 
+    APDL simulation.
+
+    Attributes:
+        frequencies( type:list ): 
+            List of the frequencies of the results
+
+        nodes ( :obj:np.array ): 
+            Cartesian positions of the nodes of the analysis, 
+            nodes[index_node,:] = [index_position_x, index_position_y, index_position_z]
+
+        nodal_results( :obj:np.array ): 
+            Raw results of the analysis classed like: 
+            nodal_results[index_node, index_ddl, index_freq] = ddl_value
+        
+        components( type:dict ):
+            dictionnary of the components of the model. For example, if the components
+            are seperated into a solid component "SOLID_NODES" and a fluid component 
+            "FLUID_NODES" :
+            components = {"SOLID_NODES":solid_indexs_nodes, "FLUID_NODES":fluid_indexs_nodes}
+
+        id_to_index( type:dic ): 
+            For a node id given from the APDL model, id_to_index[id] gives the index of 
+            all the array which corresponds to the nodes identified by the id
+        
+        freq_index( type:list ): 
+            For an index of the freqs results available, freq_index[index] = index of the 
+            list of all the frequency available for the APDL results
+
+        freq_id_to_index( type:list ): 
+            The inverse of freq index 
+        
+        displacement( :obj: np.array)
+            Gives all the displacement of the nodes :
+            displacement[node_index,:, freq_index] = [x,y,z]
+        
+        pressure( :obj: np.array)
+            Gives all the displacement of the nodes :
+            displacement[node_index,:, freq_index] = pressure
+
+    """
+    def __init__(self, frequencies:list, nodal_position:np.ndarray, components:dict,
+                nodal_results:np.ndarray, id_to_index:dict, mode_index_to_freq_index:list, 
+                disp_ddls:list = None, press_ddls:list = None, K:np.array = None, M:np.array = None,
+                eigen_vectors = None, ev = None, name:str = "Modal results"):
+        
+        super().__init__(frequencies, nodal_position, components, nodal_results, id_to_index,
+        mode_index_to_freq_index, disp_ddls, press_ddls)
+        self.K = K
+        self.M = M
+        self.eigen_vectors = eigen_vectors
+        self.ev = ev
+        self.modal_mass_dic = {}
+        self.modal_stiff_dic = {}
+    
+    def get_eigen_vec(self, idx_mode):
+        return self.eigen_vectors[:, idx_mode]
+
+    def eigen_val(self, idx_mode):
+        ev = self.ev[idx_mode]
+        ev = (2 * np.pi * ev) ** 2
+        return ev
+
+    def modal_mass(self, idx_mode):
+        modal_mass_dic = self.modal_mass_dic
+        if idx_mode not in modal_mass_dic:
+            eigen_vec = self.get_eigen_vec(idx_mode)
+            modal_mass_coeff = util.compute_modal_coeff(self.M, eigen_vec)
+            modal_mass_dic[idx_mode] = modal_mass_coeff
+        else:
+            modal_mass_coeff = modal_mass_dic[idx_mode]
+        return modal_mass_coeff
+
+    def modal_stiff(self, idx_mode):
+        modal_stiff_dic = self.modal_stiff_dic
+        if idx_mode not in modal_stiff_dic:
+            eigen_vec = self.get_eigen_vec(idx_mode)
+            modal_stiff_coeff = util.compute_modal_coeff(self.K, eigen_vec)
+            modal_stiff_dic[idx_mode] = modal_stiff_coeff
+        else:
+            modal_stiff_coeff = modal_stiff_dic[idx_mode]
+        return modal_stiff_coeff
+    
+    def compute_added_mass(self, acoustic_freq, idx_mode):
+        ev_acc = util.freq_to_ev(acoustic_freq)
+        modal_mass_coeff = self.modal_mass(idx_mode)
+        modal_stiff_coeff = self.modal_stiff(idx_mode)
+        added_mass = 1 / ev_acc * modal_stiff_coeff - modal_mass_coeff
+        return added_mass
+
+    def supp_matrixs(self):
+        delattr(self, "K")
+        delattr(self, "M")
+        
+
     def get_frequencies(self, decimal:int = None, ids_ = False, neg = False):
         """
         The methode get_frequencies
@@ -346,9 +545,9 @@ class Modal_result(Result_class):
             
         """
         if decimal == None:
-            return self.frequencies
+            return self.ev
         else:
-            frequencies = self.frequencies
+            frequencies = self.ev
             frequencies_, ids = np.unique(frequencies.round(decimals=decimal), return_index=True)
             if neg == False:
                 id_pos = np.where(frequencies_ >= 0)
@@ -357,36 +556,5 @@ class Modal_result(Result_class):
                 return frequencies[ids], ids
             else:
                 return frequencies[ids]
-    
-    def get_frequency(self, approx_freq:float, id = False):
-        """
-        The methode get_frequency
-        Note : 
-            To select the frequency with an approximation of the frequency
-        
-        Args :
-            approx_freq( float ):
-                The approximation of the frequency
-            
-            id( bool ):
-                Default = False. Indicates whether we want the index of self.frequencies
-                wich corresponds to the frequency selected
-            
-        Returns:
-            frequencies( float ):
-                The frequency selected
-            
-            ids( list ):
-                The index of the frequency selected
-            
-        """
-        frequencies = self.get_frequencies()
-        id = np.where(abs(frequencies-approx_freq) == min(abs(frequencies-approx_freq)))
-        frequency = frequencies[id]
-        if id :
-            return frequency, id
-        else : 
-            return frequency
 
-
-
+                

@@ -1,5 +1,58 @@
+import numpy as np
+import scipy as spy
+
+#------------------ Exceptions ------------------
+#----------------------------------------------------------
+
+
+
+
+
+#------------------ MAPDL - XPL ------------------
+#----------------------------------------------------------
+
+def nb_modes(xpl):
+    dic = xpl.json()
+    list_informations = dic['children']
+    dic = list_informations[3]
+    list_of_modes = dic['children']
+    return len(list_of_modes)
+
+
+#------------------ Matrixs treatment ------------------
+#----------------------------------------------------------
+
+def from_unsym_to_sym(M):
+    diag = spy.sparse.diags(M.diagonal())
+    return M + M.transpose() - diag
+
+def compute_modal_coeff(matrix, eigen_vector):
+    coeff = eigen_vector.T.dot(matrix.dot(eigen_vector)) \
+        / eigen_vector.T.dot(eigen_vector)
+    return coeff
+
+#------------------Eigen value following ------------------
+#----------------------------------------------------------
+def diff_cost(freqs_1, freqs_2):
+    n_1, n_2 = np.size(freqs_1), np.size(freqs_2)
+    cost_matrix = np.zeros((n_1, n_2))
+    for i, freq_1 in enumerate(freqs_1):
+        for j, freq_2 in enumerate(freqs_2):
+            cost_matrix[i,j] = abs(freq_1 - freq_2)
+    return cost_matrix
+
 #------------------Added mass computation------------------
 #----------------------------------------------------------
+
+def freq_to_ev(freq):
+    return (2 * np.pi * freq) ** 2
+
+
+
+
+
+
+
 
 
 

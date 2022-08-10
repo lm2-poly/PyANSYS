@@ -1,5 +1,3 @@
-from fileinput import filename
-from pydoc import ModuleScanner
 from unittest import result
 import matplotlib.pyplot as plt
 from ansys.mapdl import reader as pymapdl_reader
@@ -13,17 +11,16 @@ import os
 import shutil
 from tqdm import tqdm
 import pprint as pp
+import analyse_result_ansys as ARA
+import traceback
 
 MASS_ELEMENT = "mass_element"
 SPR_ELEMENT = "spring_element"
 AC_ELEMENT = "acoustic_element"
-AC_ELEMENT_3D = "acoustic_element_3D"
 AC_LIM_ELEMENT = "acoustic_limit_element"
 MPC_ELEMENT = "mpc_element"
 STR_ELEMENT = "structural_element"
-STR_ELEMENT_3D = "structural_element_3D"
 DENS = "density"
-OMEG = "fluid_omega"
 SOUND_VEL = "celerity"
 STRUCTURAL_SOUND_VEL= "structural_sound_celerity"
 E_MODULUS = "young-modulus"
@@ -113,31 +110,22 @@ class Fe_model:
 
 class Disc_model(Fe_model):
     def __init__(self, model_name, db_name, template_file_path, variables, fluid_element, structural_element, fluid_density,sound_celerity, structural_density, young_modulus, poisson,result_propreties, real_constants, mass_element, spring_element,  fluid_infinite_element,
-                structural_sound_celerity, dimension_3D = False, mean_flow = False, CSV_file = False, fluid_element_3D = None, structural_element_3D = None, csv_file_path = None,  flow_type = None, omega = None):
+                structural_sound_celerity):
         super().__init__(model_name, db_name, template_file_path, variables)
 
         
 
         self.real_constants=real_constants
-        self.mean_flow = mean_flow
-        self.flow_type = flow_type
-        self.csv_file_path = csv_file_path
-        self.dimension_3D = dimension_3D
-        self.CSV_file = CSV_file
-        self.omega = omega
 
         elements = {}
         elements[MASS_ELEMENT]= mass_element
         elements[SPR_ELEMENT]= spring_element
         elements[AC_ELEMENT] = fluid_element
-        elements[AC_ELEMENT_3D] = fluid_element_3D
         elements[AC_LIM_ELEMENT]= fluid_infinite_element
         elements[STR_ELEMENT] = structural_element
-        elements[STR_ELEMENT_3D] = structural_element_3D
         self.elements = elements
 
         fluid_propreties = {}
-        fluid_propreties[OMEG] = omega
         fluid_propreties[DENS] = fluid_density
         fluid_propreties[SOUND_VEL] = sound_celerity
         self.fluid_propreties = fluid_propreties
@@ -150,87 +138,6 @@ class Disc_model(Fe_model):
         self.structural_propreties = structural_propreties
 
         self.result_propreties = result_propreties
-
-        # MAPDL commands block added to files when mean flow is turned on (fe_model().rotation_mean_flow_effect = True)
-        self.generic_mean_flow_lines_Blais = ['CSYS,12 ! activate cylindrical coordinate system\n','\n','! interpolation of mean velocity\n',
-        '*DIM,val,TABLE,3,,,X,,,12 !X = Radius in cylindrical coord system\n',
-        '*TAXIS,val(1),1,0.0,inner_radius,outer_water_radius ! center point, inner radius, outer radius (m)\n',
-        'val(1) = 0.0,(1-K)*inner_radius*omega*3.14159265*2,(1-K)*outer_water_radius*omega*3.14159265*2\n','\n','*IF,omega,GT,0,then\n'
-        '! mean velocity set to (0,r*omega_f,0)\n','BF,fluid_nodes,VMEN,0.0,%val%,0.0 !interpolate tangential component\n','*endif\n','\n',
-        '! reselection of all elements and nodes\n','ESEL,all\n','NSEL,all\n','CSYS,0\n','!End of mean flow commands\n','\n']
-
-
-
-        self.generic_mean_flow_lines_TC_flow = ['CSYS,12 ! activate cylindrical coordinate system\n','\n','! interpolation of mean velocity\n',
-        '*DIM,val,TABLE,3,,,X,,,12 !X = Radius in cylindrical coord system\n',
-        '*TAXIS,val(1),1,inner_radius,(inner_radius+outer_radius)/2,outer_radius ! center point, inner radius, outer radius (m)\n',
-        'mid_radius = (outer_radius+inner_radius)/2 \n','val_1 = omega*inner_radius*inner_radius/(outer_radius*outer_radius-inner_radius*inner_radius)*(outer_radius*outer_radius/inner_radius-inner_radius)\n',
-        'val_2 = omega*inner_radius*inner_radius/(outer_radius*outer_radius-inner_radius*inner_radius)*(outer_radius*outer_radius/mid_radius-mid_radius)\n',
-        'val_3 = omega*inner_radius*inner_radius/(outer_radius*outer_radius-inner_radius*inner_radius)*(outer_radius*outer_radius/outer_radius-outer_radius)\n',
-        'val(1) = val_1,val_2,val_3\n','\n','*IF,omega,GT,0,then\n',
-        '! mean velocity set to (0,r*omega_f,0)\n','BF,fluid_nodes,VMEN,0.0,%val%,0.0 !interpolate tangential component\n','*endif\n','\n',
-        '! reselection of all elements and nodes\n','ESEL,all\n','NSEL,all\n','CSYS,0\n','!End of mean flow commands\n','\n']
-
-
-        self.generic_mean_flow_lines_cst_w = ['CSYS,12 ! activate cylindrical coordinate system\n','\n','! interpolation of mean velocity\n',
-        '*DIM,val,TABLE,3,,,X,,,12 !X = Radius in cylindrical coord system\n',
-        '*TAXIS,val(1),1,inner_radius,(inner_radius+outer_radius)/2,outer_radius ! center point, inner radius, outer radius (m)\n',
-        'val(1) = inner_radius*omega,(inner_radius+outer_radius)/2*omega,outer_radius*omega\n','\n','*IF,omega,GT,0,then\n'
-        '! mean velocity set to (0,r*omega_f,0)\n','BF,fluid_nodes,VMEN,0.0,%val%,0.0 !interpolate tangential component\n','*endif\n','\n',
-        '! reselection of all elements and nodes\n','ESEL,all\n','NSEL,all\n','CSYS,0\n','!End of mean flow commands\n','\n']
-
-        self.generic_csv_mean_flow_lines = ['CSYS,12 ! activate cylindrical coordinate system\n','\n','! interpolation of mean velocity\n',
-        '\n','to_skip = 1 ! enter number of lines to skip ie 1 in this example \n', 'numlines = 4 !/INQUIRE,numlines,LINES,file_name,csv\n',
-        'to_read=numlines-to_skip \n','\n', '*DEL,val,,NOPR \n', '*DIM,val,TABLE,to_read,,,X,,,12 ! table array to hold data \n',
-        '*TREAD,val,file_name,csv,folder_name,to_skip \n','\n','*IF,omega,GT,0,then\n','BF,fluid_nodes,VMEN,0.0,%val%,0.0 !interpolate tangential component\n',
-        '*endif\n','\n', '! reselection of all elements and nodes\n','ESEL,all\n','NSEL,all\n','CSYS,0\n','!End of mean flow commands\n','\n']
-
-
-    def write_mean_flow_csv_file(self):
-        the_omega = self.fluid_propreties[OMEG]
-        csv_file_path = self.csv_file_path
-        variables = self.variables
-        for variable_name, variable_value in variables.items():
-            #print (variable_name, variable_value)
-            if variable_name == "inner_radius":
-                R1 = variable_value
-            elif variable_name == "outer_radius":
-                R2 = variable_value
-        flow_type = self.flow_type
-        #cas de omega constant
-        if flow_type == "cst_w":
-            omega_string = str(round(the_omega,5))
-            omega_number = the_omega
-            csv_file_name = (csv_file_path / ("w_" + omega_string + ".csv"))
-            csv_file = open(csv_file_name,"w")
-            csv_file.write("radius, u_theta \n")
-            #delta_r = 0.001
-            delta_r = (R2-R1)/2
-            r = R1
-            while(r <= R2):
-                u_theta = r*omega_number
-                u_theta = round(u_theta,3)
-                csv_file.write(str(r) + "," + str(u_theta) + "\n") 
-                r+=delta_r
-            csv_file.close()
-        #ecoulement de taylor couette
-        elif flow_type == "TC_flow":
-            omega_number = the_omega
-            omega_string = str(round(the_omega,5))
-            csv_file_name = (csv_file_path / ("w_" + omega_string + ".csv"))
-            csv_file = open(csv_file_name,"w")
-            csv_file.write("radius, u_theta \n")
-            csv_file.write("0.0,0.0 \n")
-            r = R1
-            delta_r = (R1+R2)/2
-            while (r <= R2):
-                u_theta = omega_number/(R2**2-R1**2)*(R2**2/r-r)
-                u_theta = round(u_theta,1)
-                csv_file.write(str(r) + "," + str(u_theta) + "\n") 
-                r+=delta_r
-            csv_file.close()
-
-
 
 
 
@@ -258,12 +165,6 @@ class Disc_model(Fe_model):
             template_file = open(template_file_path,'r')
             template_lines = template_file.readlines()
             template_file.close()
-
-            #obtain csv file name to write it later in the template
-            if self.mean_flow == True and self.CSV_file == True:
-                omega_string = str(round(self.omega,5))
-                csv_file_path = self.csv_file_path
-                csv_file_name = (csv_file_path / ("csv_file_" + omega_string + ".csv"))
 
             # obtain model file's full path
             model_file_path = ''.join((analysis_dir,'/', self.model_name))
@@ -309,18 +210,12 @@ class Disc_model(Fe_model):
                     # fluid element type
                     elif '!fluid type' in line:
                         file.write(line)
-                        if self.dimension_3D:
-                            file.write(''.join(('ET,1,', self.elements[AC_ELEMENT_3D], '\n')))
-                        else:
-                            file.write(''.join(('ET,1,', self.elements[AC_ELEMENT], '\n')))
+                        file.write(''.join(('ET,1,', self.elements[AC_ELEMENT], '\n')))
                         continue # go to next line
                     # structural element type
                     elif '!solid type' in line:
                         file.write(line)
-                        if self.dimension_3D:
-                            file.write(''.join(('ET,2,', self.elements[STR_ELEMENT_3D], '\n')))
-                        else: 
-                            file.write(''.join(('ET,2,', self.elements[STR_ELEMENT], '\n')))
+                        file.write(''.join(('ET,2,', self.elements[STR_ELEMENT], '\n')))
                         continue # go to next line
                     # mass element type
                     elif '!mass type' in line:
@@ -356,47 +251,6 @@ class Disc_model(Fe_model):
                         file.write(''.join(('MP,NUXY,2,', str(self.structural_propreties[POISS]), ',', '\n')))
                         file.write(''.join(('MP,DENS,2,', str(self.structural_propreties[DENS]), ',', '! kg m^-3', '\n')))
                         continue # go to next line
-
-                    # #CSV file name to read
-                    elif '!file_path' in line and self.mean_flow == True and self.csv_file_path != None:
-                        flow_type = self.flow_type
-                        csv_file_name = "w_" + omega_string
-                        csv_folder_name = "../csv_file/" + flow_type + "/"
-                        file.write(line)
-                        file.write("".join(("file_name = '", str(csv_file_name),"'", "\n")))
-                        file.write("".join(("folder_name = '", str(csv_folder_name),"'", "\n")))
-                        continue # go to next line
-
-                    # activate mean flow command for omega constant
-                    elif line.split(',')[0].lower() == 'modopt' and (self.mean_flow == True) and (self.flow_type == "cst_w") and (self.CSV_file == False):
-                        if self.fluid_propreties[OMEG] <= 10:
-                            file.write(''.join(('modopt, DAMP,',str(6),',',str(1.0),',',str(1200.),',','ON,ON', '\n')))
-                        else:
-                            file.write(''.join(('modopt, DAMP,',str(16),',',str(1.0),',',str(1200.),',','ON,ON', '\n')))
-                        file.write(''.join(('omega','=',str(self.fluid_propreties[OMEG]), '\n')))
-                        file.writelines(self.generic_mean_flow_lines_cst_w) # see top of this Python script for lines block
-                        continue # go to next line
-
-                    # activate mean flow command for Couette flow
-                    elif line.split(',')[0].lower() == 'modopt' and (self.mean_flow == True) and (self.flow_type == "TC_flow") and (self.CSV_file == False):
-                        if self.fluid_propreties[OMEG] <= 10:
-                            file.write(''.join(('modopt, DAMP,',str(6),',',str(1.0),',',str(1200.),',','ON,ON', '\n')))
-                        else:
-                            file.write(''.join(('modopt, DAMP,',str(16),',',str(1.0),',',str(1200.),',','ON,ON', '\n')))
-                        file.write(''.join(('omega','=',str(self.fluid_propreties[OMEG]), '\n')))
-                        file.writelines(self.generic_mean_flow_lines_TC_flow) # see top of this Python script for lines block
-                        continue # go to next line
-
-                    #activate mean flow command with use of a CSV file
-                    elif line.split(',')[0].lower() == 'modopt' and (self.mean_flow == True) and (self.CSV_file == True):
-                        if self.fluid_propreties[OMEG] <= 10:
-                            file.write(''.join(('modopt, DAMP,',str(6),',',str(1.0),',',str(1200.),',','ON,ON', '\n')))
-                        else:
-                            file.write(''.join(('modopt, DAMP,',str(16),',',str(1.0),',',str(1200.),',','ON,ON', '\n')))
-                        file.write(''.join(('omega','=',str(self.fluid_propreties[OMEG]), '\n')))
-                        file.writelines(self.generic_csv_mean_flow_lines) # see top of this Python script for lines block
-                        continue # go to next line
-
 
                     # user input variable, if user forgot to specify a variable that's important for the requested template file,
                     # the template file line is written, else it is skipped
@@ -565,7 +419,7 @@ def clean_up_directory(mapdl,analysis_path):
             file_extension = full_file_name.split('.')[2]
 
         # if extension does not match, delete automatically
-        if file_extension not in ['dat','rst','mac']:
+        if file_extension not in ['dat','rst','mac', 'full']:
             print("Removing file:",full_file_name)
             os.remove(''.join((analysis_path,'/',full_file_name)))
         # if extension matches
@@ -610,6 +464,39 @@ class Parametric_study:
         for model, result in zip(self.models, self.results):
             model_dic[model] = result
         self.model_dic = model_dic
+    
+    def approx_freq_by_diff(self, idx_freqs:tuple, 
+                                    idx_param:int
+                                    ):
+        """
+        The methode approx_freq_by_diff
+        Note : 
+            To calculate an approximation of the frequencies: 
+        freq_i(n+2) = freq_i(n+1) + (freq_i(n+1) - freq_i(n))
+        
+        Args :
+            idx_freqs( tuple of int ):
+                the indexs of the freq for the idx_param n and n + 1
+                (i_{n}, i_{n + 1})
+            
+            var_name( str ):
+                The name of the variable where the differienciation is done
+            
+        Returns:
+            approx_freq( float ):
+                The approximation of the frequency
+        
+        """
+        idx_0, idx_1 = idx_freqs
+        results = self.results
+        result_0:ARA.Modal_result = results[idx_param]
+        freqs_0 = result_0.frequencies
+        freq_0 = freqs_0[idx_0]
+        result_1:ARA.Modal_result = results[idx_param + 1]
+        freqs_1 = result_1.frequencies
+        freq_1 = freqs_1[idx_1]
+        approx_freq = freq_1 + (freq_1 - freq_0)
+        return approx_freq
         
 
     def launch_simulations(self, new_models, add_model = True):
@@ -619,8 +506,6 @@ class Parametric_study:
         working_models = []
         for model in tqdm(new_models):
             model:Fe_model
-            if model.csv_file_path != None:
-                model.write_mean_flow_csv_file()
             model.write_mapdl_file(str(PARAM_FOLDER), verbose = False)
             model_name = model.model_name
             db_name = model.db_name
@@ -629,13 +514,23 @@ class Parametric_study:
             full_file = db_name + ".full"
             mapdl.input(model_name)
             result_propreties = model.result_propreties
+            ##########################################
+            # clean_up_directory(mapdl, str(PARAM_FOLDER))
+            # result = self.extraction_function(PARAM_FOLDER, result_file, data_file,
+            #              saving_type="result-class", result_propreties=result_propreties,
+            #              save = False, file_name_full=full_file, mapdl=mapdl)
+            # results.append(result)
+            # working_models.append(model)
+            ####################################
             try:
                 result = self.extraction_function(PARAM_FOLDER, result_file, data_file,
                          saving_type="result-class", result_propreties=result_propreties,
                          save = False, file_name_full=full_file, mapdl=mapdl)
                 results.append(result)
                 working_models.append(model)
+                #clean_up_directory(mapdl, str(PARAM_FOLDER))
             except:
+                traceback.print_exc()
                 print("------------------------------------------")
                 print("-----EXTRACT PROB WITH PARAMETERS :-------")
                 pp.pprint(model.__str__())
@@ -689,7 +584,6 @@ class Mean_Flow_Parametric_study(Parametric_study):
         working_models = []
         for model in tqdm(new_models):
             model:Disc_model
-            model.write_mean_flow_csv_file()
             model.write_mapdl_file(str(PARAM_FOLDER), verbose = False)
             model_name = model.model_name
             db_name = model.db_name
