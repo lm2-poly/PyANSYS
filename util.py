@@ -1,5 +1,8 @@
 import numpy as np
 import scipy as spy
+import scipy.interpolate as interp
+import scipy.integrate as integ
+import scipy.optimize as opt
 
 #------------------ Exceptions ------------------
 #----------------------------------------------------------
@@ -7,6 +10,27 @@ import scipy as spy
 
 
 
+#------------------ Integrations ------------------
+#----------------------------------------------------------
+
+def scalar_prod_samples_func_1D(x_samples, y_samples, product_function, bounds, integration_product = None):
+    inter_func = interp.interp1d(x_samples, y_samples, kind='cubic')
+    if integration_product == None:
+        product = lambda x : inter_func * product_function
+        a, b = bounds
+        result, error_est = integ.quad(product, a, b)
+    else:
+        result = integration_product(inter_func, product_function)
+    return result
+
+def phase_computation(func_1, func_2, scalar_product):
+    phase = 0
+    def func_to_minimize(phase):
+        delta_func_2 = lambda x : func_2(x + delta_func_2)
+        return - scalar_product(func_1, func_2)
+    final_phase = opt.minimize(func_to_minimize, phase)
+    return final_phase    
+    
 
 #------------------ MAPDL - XPL ------------------
 #----------------------------------------------------------
