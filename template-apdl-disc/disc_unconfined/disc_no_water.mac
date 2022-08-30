@@ -30,7 +30,6 @@ etcontrol,set
 
 
 
-
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !MODELLING spring and mass
 N,1,0,0,0
@@ -38,7 +37,7 @@ n,2,0,spring_length,0
 
 !MASS
 TYPE,3
-REAL,3
+REAL,2
 E,1
 
 !SPRING
@@ -56,23 +55,21 @@ E,1,2
 
 
 
-
-
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !MODELLING - END
 
 !CLOSE WATER
-CYL4,0,0,radius,0,2*radius,90
-CYL4,0,0,radius,90,2*radius,180
-CYL4,0,0,radius,180,2*radius,270
-CYL4,0,0,radius,270,2*radius,360
+CYL4,0,0,inner_radius,0,outer_radius,90
+CYL4,0,0,inner_radius,90,outer_radius,180
+CYL4,0,0,inner_radius,180,outer_radius,270
+CYL4,0,0,inner_radius,270,outer_radius,360
 
 
 !disc frontier
-CYL4,0,0,radius-width_structure,0,radius,90
-CYL4,0,0,radius-width_structure,90,radius,180
-CYL4,0,0,radius-width_structure,180,radius,270
-CYL4,0,0,radius-width_structure,270,radius,360
+CYL4,0,0,inner_radius-width_structure,0,inner_radius,90
+CYL4,0,0,inner_radius-width_structure,90,inner_radius,180
+CYL4,0,0,inner_radius-width_structure,180,inner_radius,270
+CYL4,0,0,inner_radius-width_structure,270,inner_radius,360
 
 
 !!!!!!!!!!!!!!!!!!!!!!!!
@@ -94,10 +91,10 @@ MAT,2
 MSHAPE,0,2D
 MSHKEY,1
 
-LSEL,S,LOC,X,0.9*radius
+LSEL,S,LOC,X,inner_radius-width_structure
 LESIZE,ALL,,,angular_division
-LSEL,S,LOC,X,0.9*radius, radius
-LESIZE,ALL,,,radial_division
+LSEL,S,LOC,X,inner_radius-width_structure+tol, inner_radius-tol
+LESIZE,ALL,,,structural_radial_division
 
 asel,s,area,,3
 asel,a,area,,6
@@ -108,7 +105,7 @@ AMESH,all
 
 
 !DEFINE RIGID DISC ELEMENTS WITH CERIG
-nsel,s,loc,x,radius-width_structure+tol,radius-tol
+nsel,s,loc,x,inner_radius-width_structure,inner_radius
 NSEL,a, , ,1
 !E,1,all
 cerig,1,all,uy

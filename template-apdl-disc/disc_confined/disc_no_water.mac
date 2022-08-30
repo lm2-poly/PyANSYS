@@ -37,7 +37,7 @@ n,2,0,spring_length,0
 
 !MASS
 TYPE,3
-REAL,3
+REAL,2
 E,1
 
 !SPRING

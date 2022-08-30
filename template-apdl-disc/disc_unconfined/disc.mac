@@ -38,7 +38,7 @@ n,2,0,spring_length,0
 
 !MASS
 TYPE,3
-REAL,3
+REAL,2
 E,1
 
 !SPRING
@@ -59,17 +59,17 @@ E,1,2
 !MODELLING - END
 
 !CLOSE WATER
-CYL4,0,0,radius,0,5*radius,90
-CYL4,0,0,radius,90,5*radius,180
-CYL4,0,0,radius,180,5*radius,270
-CYL4,0,0,radius,270,5*radius,360
+CYL4,0,0,inner_radius,0,outer_radius,90
+CYL4,0,0,inner_radius,90,outer_radius,180
+CYL4,0,0,inner_radius,180,outer_radius,270
+CYL4,0,0,inner_radius,270,outer_radius,360
 
 
 !disc frontier
-CYL4,0,0,radius-width_structure,0,radius,90
-CYL4,0,0,radius-width_structure,90,radius,180
-CYL4,0,0,radius-width_structure,180,radius,270
-CYL4,0,0,radius-width_structure,270,radius,360
+CYL4,0,0,inner_radius-width_structure,0,inner_radius,90
+CYL4,0,0,inner_radius-width_structure,90,inner_radius,180
+CYL4,0,0,inner_radius-width_structure,180,inner_radius,270
+CYL4,0,0,inner_radius-width_structure,270,inner_radius,360
 
 
 !!!!!!!!!!!!!!!!!!!!!!!!
@@ -88,17 +88,17 @@ CSYS,1
 !CLOSE WATER
 TYPE,1
 MAT,1
-REAL,2
+REAL,3
 MSHAPE,0,2D 
 MSHKEY,1,
 KEYOPT,1,2,0
 
-LSEL,S,LOC,X,radius
-LSEL,A,LOC,X,5*radius
+LSEL,S,LOC,X,inner_radius
+LSEL,A,LOC,X,outer_radius
 LESIZE,ALL,,,angular_division
 
-LSEL,S,LOC,X,radius+tol, 5*radius-tol
-LESIZE,ALL,,,3*radial_division
+LSEL,S,LOC,X,inner_radius+tol, outer_radius-tol
+LESIZE,ALL,,,acoustic_radial_division
 asel,s,area,,1
 asel,a,area,,2
 asel,a,area,,4
@@ -111,7 +111,7 @@ TYPE,5
 MAT,1
 REAL,4
 
-NSEL,S,LOC,X,5*radius
+NSEL,S,LOC,X,outer_radius
 ESURF
 allsel,all
 
@@ -122,10 +122,10 @@ MAT,2
 MSHAPE,0,2D
 MSHKEY,1
 
-LSEL,S,LOC,X,0.9*radius
+LSEL,S,LOC,X,inner_radius-width_structure
 LESIZE,ALL,,,angular_division
-LSEL,S,LOC,X,0.9*radius, radius
-LESIZE,ALL,,,radial_division
+LSEL,S,LOC,X,inner_radius-width_structure+tol, inner_radius-tol
+LESIZE,ALL,,,structural_radial_division
 
 asel,s,area,,3
 asel,a,area,,6
@@ -135,7 +135,7 @@ AMESH,all
 
 
 !DEFINE RIGID DISC ELEMENTS WITH CERIG
-nsel,s,loc,x,radius-width_structure,radius
+nsel,s,loc,x,inner_radius-width_structure,inner_radius
 NSEL,a, , ,1
 cerig,1,all,ux
 cerig,1,all,uy
@@ -153,8 +153,6 @@ D,all,UX,0
 
 
 
-
-
 ALLSEL,all
 nsel,all ! reselect all nodes
 ddele,all,pres ! release the pressure dof for acoustics analysis
@@ -162,13 +160,9 @@ nsel,all ! reselect all nodes
 ecpchg !automatically convert uncoupled/coupled acoustic element for acoustic ana
 
 
-
-
 allsel,all
 !Solution
 /SOLU
-
-
 antype,2 ! modal analysis
 modopt,damp,12,1.,1200.,AUTO !unsymetric solver, freq range 1Hz to 1200Hz
 outres,erase
