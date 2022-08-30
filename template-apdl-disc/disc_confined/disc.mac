@@ -145,8 +145,6 @@ D,all,UX,0
 
 
 
-
-
 ALLSEL,all
 nsel,all ! reselect all nodes
 ddele,all,pres ! release the pressure dof for acoustics analysis
@@ -154,12 +152,9 @@ nsel,all ! reselect all nodes
 ecpchg !automatically convert uncoupled/coupled acoustic element for acoustic ana
 
 
-
-
 allsel,all
 !Solution
 /SOLU
-
 antype,2 ! modal analysis
 modopt,damp,12,1.,1200.,AUTO !unsymetric solver, freq range 1Hz to 1200Hz
 outres,erase
